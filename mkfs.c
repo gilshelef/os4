@@ -10,6 +10,7 @@
 #include "fs.h"
 #include "stat.h"
 #include "param.h"
+#include "mbr.h"
 
 #ifndef static_assert
 #define static_assert(a, b) do { switch (0) case 0: case (a): ; } while (0)
@@ -26,6 +27,7 @@ int nlog = LOGSIZE;
 int nmeta;    // Number of meta blocks (boot, sb, nlog, inode, bitmap)
 int nblocks;  // Number of data blocks
 
+struct mbr mbr;
 int fsfd;
 struct superblock sb;
 char zeroes[BSIZE];
@@ -40,6 +42,7 @@ void rinode(uint inum, struct dinode *ip);
 void rsect(uint sec, void *buf);
 uint ialloc(ushort type);
 void iappend(uint inum, void *p, int n);
+void setDpartition(uint partitionNum, uint flags, uint type, uint offset, uint size);
 
 // convert to intel byte order
 ushort
@@ -90,9 +93,15 @@ main(int argc, char *argv[])
     exit(1);
   }
 
+
+
   // 1 fs block = 1 disk sector
   nmeta = 2 + nlog + ninodeblocks + nbitmap;
   nblocks = FSSIZE - nmeta;
+
+
+
+
 
   sb.size = xint(FSSIZE);
   sb.nblocks = xint(nblocks);
@@ -109,6 +118,19 @@ main(int argc, char *argv[])
 
   for(i = 0; i < FSSIZE; i++)
     wsect(i, zeroes);
+
+
+  /*-------------------------------------------------------------------------*/
+    //add mbr to disk1 - fs.img
+  mbr.magic[0] = MAGIC1; //init mbr signature
+  mbr.magic[1] = MAGIC2;
+
+  setDpartition(0, PART_BOOTABLE, FS_INODE, 1, FSSIZE);
+  memset(buf, 0, sizeof(buf));
+  memmove(buf, &mbr, sizeof(mbr));
+  wsect(0, buf); //write mbr to block number 0
+  /*-------------------------------------------------------------------------*/
+
 
   memset(buf, 0, sizeof(buf));
   memmove(buf, &sb, sizeof(sb));
@@ -294,4 +316,14 @@ iappend(uint inum, void *xp, int n)
   }
   din.size = xint(off);
   winode(inum, &din);
+}
+
+void
+setDpartition(uint partitionNum, uint flags, uint type, uint offset, uint size)
+{
+    mbr.partitions[partitionNum].flags = flags;
+    mbr.partitions[partitionNum].type = type;
+    mbr.partitions[partitionNum].offset = offset;
+    mbr.partitions[partitionNum].size = size;
+
 }

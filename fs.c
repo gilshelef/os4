@@ -19,10 +19,32 @@
 #include "fs.h"
 #include "buf.h"
 #include "file.h"
+#include "mbr.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 static void itrunc(struct inode*);
 struct superblock sb;   // there should be one per dev, but we run with one dev
+
+/* ----------------------------------------------------------------------------- */
+struct mbr mbr;
+
+void 
+readmbr(int dev, struct mbr* mbr)
+{
+  struct buf *bp;
+  struct dpartition partition;
+  int i;
+  bp = bread(dev, 0);
+  memmove(mbr, bp->data, sizeof(*mbr));
+  for(i = 0; i < NPARTITIONS; i++){
+    partition = mbr->partitions[i];
+    if(partition.flags == PART_BOOTABLE)
+      cprintf("Partition %d: bootable: %s, type %s, offset %d, size %d\n", i,
+        partition.flags == PART_BOOTABLE ? "YES": "NO", 
+        partition.type == FS_INODE ? "INODE" : "FAT", 
+        partition.offset, partition.size);
+  }
+}
 
 // Read the super block.
 void
@@ -163,7 +185,9 @@ void
 iinit(int dev)
 {
   initlock(&icache.lock, "icache");
+  cprintf(" ***** dev: %d ***** \n", dev);
   readsb(dev, &sb);
+  readmbr(dev, &mbr);
   cprintf("sb: size %d nblocks %d ninodes %d nlog %d logstart %d inodestart %d bmap start %d\n", sb.size,
           sb.nblocks, sb.ninodes, sb.nlog, sb.logstart, sb.inodestart, sb.bmapstart);
 }
